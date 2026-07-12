@@ -226,8 +226,19 @@ if ! touch "/etc/pve/qemu-server/$ID.conf"; then
     cleanup
 fi
 
-# Get the storage name from the user
-STORAGE=$(whiptail --inputbox 'Enter the storage name where the image should be imported:' 8 78 --title 'DietPi Installation' 3>&1 1>&2 2>&3)
+# Build a list of active storages that support VM disk images
+STORAGE_ENTRIES=()
+while read -r name type avail; do
+    STORAGE_ENTRIES+=("$name" "$type, $avail free")
+done < <(pvesm status --content images 2>/dev/null | awk 'NR>1 && $3=="active" {printf "%s %s %.1fG\n", $1, $2, $6/1048576}')
+
+if [ ${#STORAGE_ENTRIES[@]} -eq 0 ]; then
+    echo 'Error: No active storage supporting disk images found'
+    cleanup
+fi
+
+# Let the user pick the storage where the image should be imported
+STORAGE=$(whiptail --title 'DietPi Installation' --menu 'Select the storage where the image should be imported:' 16 70 8 "${STORAGE_ENTRIES[@]}" 3>&1 1>&2 2>&3)
 
 # Check if user cancelled or if storage is empty
 if [ $? -ne 0 ] || [ -z "$STORAGE" ]; then
