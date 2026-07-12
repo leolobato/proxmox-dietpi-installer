@@ -135,91 +135,131 @@ verify_download() {
     return 0
 }
 
-# Select DietPi OS Version
+# Gather all installation options, then show a summary for confirmation
 while true; do
-    OS_VERSION=$(whiptail --title 'DietPi Installation' --menu 'Select DietPi image:' 19 65 11 \
-        ''                '───────── Debian 13 Trixie ─────────' \
-        'trixie'          'Standard (Recommended)' \
-        'trixie-uefi'     'UEFI Boot' \
-        ''                '───────── Debian 12 Bookworm ───────' \
-        'bookworm'        'Standard' \
-        'bookworm-uefi'   'UEFI Boot' \
-        ''                '───────── Debian 14 Forky ──────────' \
-        'forky'           'Standard (Testing)' \
-        'forky-uefi'      'UEFI Boot (Testing)' \
-        ''                '────────────────────────────────────' \
-        'custom'          'Custom URL' 3>&1 1>&2 2>&3)
+    # Select DietPi OS Version
+    while true; do
+        OS_VERSION=$(whiptail --title 'DietPi Installation' --menu 'Select DietPi image:' 19 65 11 \
+            ''                '───────── Debian 13 Trixie ─────────' \
+            'trixie'          'Standard (Recommended)' \
+            'trixie-uefi'     'UEFI Boot' \
+            ''                '───────── Debian 12 Bookworm ───────' \
+            'bookworm'        'Standard' \
+            'bookworm-uefi'   'UEFI Boot' \
+            ''                '───────── Debian 14 Forky ──────────' \
+            'forky'           'Standard (Testing)' \
+            'forky-uefi'      'UEFI Boot (Testing)' \
+            ''                '────────────────────────────────────' \
+            'custom'          'Custom URL' 3>&1 1>&2 2>&3)
+
+        # Check if user cancelled
+        if [ $? -ne 0 ]; then
+            cleanup
+        fi
+
+        # If separator selected, show menu again
+        if [ -n "$OS_VERSION" ]; then
+            break
+        fi
+    done
+
+    # Set IMAGE_URL based on selection
+    BASE_URL='https://dietpi.com/downloads/images'
+    case $OS_VERSION in
+        trixie)
+            IMAGE_URL="$BASE_URL/DietPi_Proxmox-x86_64-Trixie.qcow2.xz"
+            ;;
+        trixie-uefi)
+            IMAGE_URL="$BASE_URL/DietPi_Proxmox-UEFI-x86_64-Trixie.qcow2.xz"
+            ;;
+        bookworm)
+            IMAGE_URL="$BASE_URL/DietPi_Proxmox-x86_64-Bookworm.qcow2.xz"
+            ;;
+        bookworm-uefi)
+            IMAGE_URL="$BASE_URL/DietPi_Proxmox-UEFI-x86_64-Bookworm.qcow2.xz"
+            ;;
+        forky)
+            IMAGE_URL="$BASE_URL/DietPi_Proxmox-x86_64-Forky.qcow2.xz"
+            ;;
+        forky-uefi)
+            IMAGE_URL="$BASE_URL/DietPi_Proxmox-UEFI-x86_64-Forky.qcow2.xz"
+            ;;
+        custom)
+            IMAGE_URL=$(whiptail --inputbox 'Enter the URL for the DietPi image:' 8 78 "$BASE_URL/DietPi_Proxmox-x86_64-Trixie.qcow2.xz" --title 'DietPi Installation' 3>&1 1>&2 2>&3)
+            if [ $? -ne 0 ]; then
+                cleanup
+            fi
+            ;;
+        *)
+            echo 'Invalid selection'
+            cleanup
+            ;;
+    esac
+
+    # Flag to track if we should verify download (only for official images)
+    VERIFY_DOWNLOAD='true'
+    if [ "$OS_VERSION" = 'custom' ]; then
+        VERIFY_DOWNLOAD='false'
+    fi
+
+    RAM=$(whiptail --inputbox 'Enter the amount of RAM (in MB) for the new virtual machine (default: 2048):' 8 78 2048 --title 'DietPi Installation' 3>&1 1>&2 2>&3)
 
     # Check if user cancelled
     if [ $? -ne 0 ]; then
         cleanup
     fi
 
-    # If separator selected, show menu again
-    if [ -n "$OS_VERSION" ]; then
-        break
-    fi
-done
+    CORES=$(whiptail --inputbox 'Enter the number of cores for the new virtual machine (default: 2):' 8 78 2 --title 'DietPi Installation' 3>&1 1>&2 2>&3)
 
-# Set IMAGE_URL based on selection
-BASE_URL='https://dietpi.com/downloads/images'
-case $OS_VERSION in
-    trixie)
-        IMAGE_URL="$BASE_URL/DietPi_Proxmox-x86_64-Trixie.qcow2.xz"
-        ;;
-    trixie-uefi)
-        IMAGE_URL="$BASE_URL/DietPi_Proxmox-UEFI-x86_64-Trixie.qcow2.xz"
-        ;;
-    bookworm)
-        IMAGE_URL="$BASE_URL/DietPi_Proxmox-x86_64-Bookworm.qcow2.xz"
-        ;;
-    bookworm-uefi)
-        IMAGE_URL="$BASE_URL/DietPi_Proxmox-UEFI-x86_64-Bookworm.qcow2.xz"
-        ;;
-    forky)
-        IMAGE_URL="$BASE_URL/DietPi_Proxmox-x86_64-Forky.qcow2.xz"
-        ;;
-    forky-uefi)
-        IMAGE_URL="$BASE_URL/DietPi_Proxmox-UEFI-x86_64-Forky.qcow2.xz"
-        ;;
-    custom)
-        IMAGE_URL=$(whiptail --inputbox 'Enter the URL for the DietPi image:' 8 78 "$BASE_URL/DietPi_Proxmox-x86_64-Trixie.qcow2.xz" --title 'DietPi Installation' 3>&1 1>&2 2>&3)
-        if [ $? -ne 0 ]; then
-            cleanup
-        fi
-        ;;
-    *)
-        echo 'Invalid selection'
+    # Check if user cancelled
+    if [ $? -ne 0 ]; then
         cleanup
-        ;;
-esac
+    fi
 
-# Flag to track if we should verify download (only for official images)
-VERIFY_DOWNLOAD='true'
-if [ "$OS_VERSION" = 'custom' ]; then
-    VERIFY_DOWNLOAD='false'
-fi
+    DISK_SIZE=$(whiptail --inputbox 'Enter the disk size (in GB) for the new virtual machine (default: 8):' 8 78 8 --title 'DietPi Installation' 3>&1 1>&2 2>&3)
 
-RAM=$(whiptail --inputbox 'Enter the amount of RAM (in MB) for the new virtual machine (default: 2048):' 8 78 2048 --title 'DietPi Installation' 3>&1 1>&2 2>&3)
+    # Check if user cancelled
+    if [ $? -ne 0 ]; then
+        cleanup
+    fi
 
-# Check if user cancelled
-if [ $? -ne 0 ]; then
-    cleanup
-fi
+    # Build a list of active storages that support VM disk images
+    STORAGE_ENTRIES=()
+    while read -r name type avail; do
+        STORAGE_ENTRIES+=("$name" "$type, $avail free")
+    done < <(pvesm status --content images 2>/dev/null | awk 'NR>1 && $3=="active" {printf "%s %s %.1fG\n", $1, $2, $6/1048576}')
 
-CORES=$(whiptail --inputbox 'Enter the number of cores for the new virtual machine (default: 2):' 8 78 2 --title 'DietPi Installation' 3>&1 1>&2 2>&3)
+    if [ ${#STORAGE_ENTRIES[@]} -eq 0 ]; then
+        echo 'Error: No active storage supporting disk images found'
+        cleanup
+    fi
 
-# Check if user cancelled
-if [ $? -ne 0 ]; then
-    cleanup
-fi
+    # Let the user pick the storage where the image should be imported
+    STORAGE=$(whiptail --title 'DietPi Installation' --menu 'Select the storage where the image should be imported:' 16 70 8 "${STORAGE_ENTRIES[@]}" 3>&1 1>&2 2>&3)
 
-DISK_SIZE=$(whiptail --inputbox 'Enter the disk size (in GB) for the new virtual machine (default: 8):' 8 78 8 --title 'DietPi Installation' 3>&1 1>&2 2>&3)
+    # Check if user cancelled or if storage is empty
+    if [ $? -ne 0 ] || [ -z "$STORAGE" ]; then
+        echo 'Storage selection cancelled or empty. Aborting.'
+        cleanup
+    fi
 
-# Check if user cancelled
-if [ $? -ne 0 ]; then
-    cleanup
-fi
+    # Show a summary of all selections before executing
+    whiptail --title 'DietPi Installation' --yes-button 'Continue' --no-button 'Restart' --yesno "Review your selections:
+
+  Image:      $OS_VERSION
+  Image URL:  $IMAGE_URL
+  RAM:        $RAM MB
+  Cores:      $CORES
+  Disk size:  $DISK_SIZE GB
+  Storage:    $STORAGE
+
+Continue with the installation, or restart to change your selections?" 19 78
+    case $? in
+        0) break ;;      # Continue
+        1) continue ;;   # Restart
+        *) cleanup ;;    # Esc
+    esac
+done
 
 # Install xz-utils if missing
 dpkg-query -s xz-utils &> /dev/null || { echo 'Installing xz-utils for DietPi image decompression'; apt-get update; apt-get -y install xz-utils; }
@@ -230,26 +270,6 @@ ID=$(pvesh get /cluster/nextid)
 # Create VM config file
 if ! touch "/etc/pve/qemu-server/$ID.conf"; then
     echo 'Error: Could not create VM configuration file'
-    cleanup
-fi
-
-# Build a list of active storages that support VM disk images
-STORAGE_ENTRIES=()
-while read -r name type avail; do
-    STORAGE_ENTRIES+=("$name" "$type, $avail free")
-done < <(pvesm status --content images 2>/dev/null | awk 'NR>1 && $3=="active" {printf "%s %s %.1fG\n", $1, $2, $6/1048576}')
-
-if [ ${#STORAGE_ENTRIES[@]} -eq 0 ]; then
-    echo 'Error: No active storage supporting disk images found'
-    cleanup
-fi
-
-# Let the user pick the storage where the image should be imported
-STORAGE=$(whiptail --title 'DietPi Installation' --menu 'Select the storage where the image should be imported:' 16 70 8 "${STORAGE_ENTRIES[@]}" 3>&1 1>&2 2>&3)
-
-# Check if user cancelled or if storage is empty
-if [ $? -ne 0 ] || [ -z "$STORAGE" ]; then
-    echo 'Storage selection cancelled or empty. Aborting.'
     cleanup
 fi
 
