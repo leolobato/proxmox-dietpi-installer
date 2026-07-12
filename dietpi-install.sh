@@ -214,6 +214,13 @@ if [ $? -ne 0 ]; then
     cleanup
 fi
 
+DISK_SIZE=$(whiptail --inputbox 'Enter the disk size (in GB) for the new virtual machine (default: 8):' 8 78 8 --title 'DietPi Installation' 3>&1 1>&2 2>&3)
+
+# Check if user cancelled
+if [ $? -ne 0 ]; then
+    cleanup
+fi
+
 # Install xz-utils if missing
 dpkg-query -s xz-utils &> /dev/null || { echo 'Installing xz-utils for DietPi image decompression'; apt-get update; apt-get -y install xz-utils; }
 
@@ -317,6 +324,11 @@ qm set "$ID" --scsihw virtio-scsi-pci || cleanup
 qm set "$ID" --net0 'virtio,bridge=vmbr0' || cleanup
 qm set "$ID" --scsi0 "$DISK_PATH,discard=on,ssd=1" || cleanup
 qm set "$ID" --ostype l26 || cleanup
+
+# Grow the disk to the requested size (disks cannot be shrunk below the image size)
+if ! qm resize "$ID" scsi0 "${DISK_SIZE}G"; then
+    echo "Note: Could not resize disk to ${DISK_SIZE}G. Keeping the image's original size."
+fi
 
 # Verify disk setup and set boot order
 if qm config "$ID" | grep -q 'scsi0'; then
